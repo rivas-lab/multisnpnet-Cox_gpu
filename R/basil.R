@@ -148,6 +148,11 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
     which.in.model <- which(names(score) %in% covs)
     score[which.in.model] <- NA
     sorted.score <- sort(score, decreasing = T, na.last = NA)
+
+    if(num_to_add > (6500 - length(covs))){
+      warning("GPU memory limit will be reached, reduce number of variabels to add")
+      num_to_add = 6500 - length(covs)
+    }
     features.to.add <- names(sorted.score)[1:min(num_to_add, length(sorted.score))]
     covs = c(covs, features.to.add)
     B_init = rbind(current_B, matrix(0.0, nrow=length(features.to.add), ncol=K))
@@ -165,7 +170,7 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
     # Need better ways to set p.fac
     p.fac = rep(1, nrow(B_init))
     p.fac[1:num_not_penalized] = 0.0
-    print(paste("Number of variables to be fitted is:",length(B_init)))
+    print(paste("Number of variables to be fitted is:",nrow(B_init)))
 
     X = as.matrix(select(phe_train, all_of(covs)))
     result = solve_aligned_gpu(X,y_list, status_list, lambda_seq_local, lambda_seq_local*alpha, p.fac=p.fac, B0=B_init)
@@ -217,7 +222,7 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
             }
         }
         # Save temp result to files
-        save_list = list(Ctrain = Ctrain, Cval = Cval,  beta=out)
+        save_list = list(Ctrain = Ctrain, Cval = Cval,  beta=out, covs=covs)
         save(save_list, 
                 file=file.path(configs[['save.dir']], paste0("saveresult", iter, ".RData")))
 
@@ -250,6 +255,5 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
     iter = iter + 1
 
   }
-  save_list = list(Ctrain = Ctrain, Cval = Cval,  beta=out)
   return(save_list)
 }
