@@ -166,6 +166,18 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
     cudaMemcpy(dev_data.rev_order, &rev_order_mat(0,0), sizeof(int)*N*K, cudaMemcpyHostToDevice);
 
 
+    cudaDeviceSynchronize();
+
+    // check for error
+    cudaError_t error = cudaGetLastError();
+    if(error != cudaSuccess)
+    {
+        // print the CUDA error message and exit
+        std::cout << "CUDA error: " << cudaGetErrorString(error) << std::endl;
+        Rcpp::stop("CUDA error occured, most likely a memory allocation problem.\n"); 
+    }
+
+
     numeric cox_val;
     numeric cox_val_next;
     numeric rhs_ls; // right-hand side of line search condition
