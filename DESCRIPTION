@@ -12,7 +12,7 @@ License: MIT + file LICENSE
 Encoding: UTF-8
 LazyData: true
 Imports: 
-    Rcpp
+    Rcpp, pgenlibr, cindex, mrcox, data.table, tidyverse
 RoxygenNote: 7.1.0
 LinkingTo: 
     Rcpp, RcppEigen
