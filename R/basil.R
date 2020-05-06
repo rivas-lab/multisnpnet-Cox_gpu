@@ -217,7 +217,8 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
             }
         }
         # Save temp result to files
-        save(list(Ctrain = Ctrain, Cval = Cval,  beta=out), 
+        save_list = list(Ctrain = Ctrain, Cval = Cval,  beta=out)
+        save(save_list, 
                 file=file.path(configs[['save.dir']], paste0("saveresult", iter, ".RData")))
 
 
@@ -249,5 +250,6 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
     iter = iter + 1
 
   }
-  return(list(Ctrain = Ctrain, Cval = Cval,  beta=out))
+  save_list = list(Ctrain = Ctrain, Cval = Cval,  beta=out)
+  return(save_list)
 }
