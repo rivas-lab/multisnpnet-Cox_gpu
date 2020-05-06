@@ -1,0 +1,37 @@
+CUDA_HOME = /scg/apps/software/cuda/10.1.168_418.67
+R_HOME = /home/ruilinli/R/x86_64-pc-linux-gnu-library/3.6
+CXX = g++
+
+# This defines what the shared object libraries will be
+PKG_LIBS= -L$(CUDA_HOME)/lib64 -Wl,-rpath -Wl, -lcublas -lcudart
+
+
+R_INC = /scg/apps/software/r/3.6.3
+RCPP_INC = $(R_HOME)/Rcpp/include
+EIGEN_INC = $(R_HOME)/RcppEigen/include
+
+NVCC = nvcc
+CUDA_INC = $(CUDA_HOME)/include
+CUDA_LIB = $(CUDA_HOME)/lib64
+
+LIBS = -lcudart -lcublas
+NVCC_FLAGS = -Xcompiler "-fPIC" -O2 -c -arch=sm_60 -I$(R_INC)
+
+### Define objects
+cu_sources := $(wildcard *cu)
+cu_sharedlibs := $(patsubst %.cu, %.o,$(cu_sources))
+
+cpp_sources := $(wildcard *.cpp)
+cpp_sharedlibs := $(patsubst %.cpp, %.o, $(cpp_sources))
+
+OBJECTS = $(cu_sharedlibs) $(cpp_sharedlibs)
+
+all : rcppcuda.so
+
+rcppcuda.so: $(OBJECTS)
+
+%.o: %.cpp $(cpp_sources)
+	$(CXX) $< -c -fPIC -I$(R_INC) -I$(RCPP_INC) -I$(EIGEN_INC) -I$(CUDA_INC) -I/usr/include -I$(CUDA_HOME)/samples/common/inc -Wno-ignored-attributes
+
+%.o: %.cu $(cu_sources)
+	$(NVCC) $(NVCC_FLAGS) -I$(CUDA_INC) -I$(EIGEN_INC) -I$(RCPP_INC) -I$(CUDA_HOME)/samples/common/inc $< -c
