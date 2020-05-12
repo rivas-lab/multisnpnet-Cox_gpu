@@ -1,14 +1,13 @@
 CUDA_HOME = /scg/apps/software/cuda/10.1.168_418.67
-R_HOME = /home/ruilinli/R/x86_64-pc-linux-gnu-library/3.6
 CXX = g++
 
 # This defines what the shared object libraries will be
 PKG_LIBS= -L$(CUDA_HOME)/lib64 -Wl,-rpath -Wl, -lcublas -lcudart
 
 
-R_INC = /scg/apps/software/r/3.6.3
-RCPP_INC = $(R_HOME)/Rcpp/include
-EIGEN_INC = $(R_HOME)/RcppEigen/include
+R_INC = $(R_HOME)/include
+RCPP_INC = $(R_HOME)/library/Rcpp/include
+EIGEN_INC = $(R_HOME)/library/RcppEigen/include
 
 NVCC = nvcc
 CUDA_INC = $(CUDA_HOME)/include
