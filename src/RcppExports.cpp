@@ -8,26 +8,26 @@
 using namespace Rcpp;
 
 // solve_path
-Rcpp::List solve_path(Rcpp::NumericMatrix X, Rcpp::NumericMatrix status, Rcpp::IntegerMatrix rankmin, Rcpp::IntegerMatrix rankmax, Rcpp::IntegerMatrix order_mat, Rcpp::IntegerMatrix rev_order_mat, Rcpp::NumericMatrix B0, Rcpp::NumericVector lambda_1_all, Rcpp::NumericVector lambda_2_all, VectorXd pfac, double step_size, int niter, double linesearch_beta, double eps);
-RcppExport SEXP _proxgpu_solve_path(SEXP XSEXP, SEXP statusSEXP, SEXP rankminSEXP, SEXP rankmaxSEXP, SEXP order_matSEXP, SEXP rev_order_matSEXP, SEXP B0SEXP, SEXP lambda_1_allSEXP, SEXP lambda_2_allSEXP, SEXP pfacSEXP, SEXP step_sizeSEXP, SEXP niterSEXP, SEXP linesearch_betaSEXP, SEXP epsSEXP) {
+Rcpp::List solve_path(Rcpp::NumericMatrix Xd, Rcpp::NumericMatrix statusd, Rcpp::IntegerMatrix rankmin, Rcpp::IntegerMatrix rankmax, Rcpp::IntegerMatrix order_mat, Rcpp::IntegerMatrix rev_order_mat, Rcpp::NumericMatrix B0d, Rcpp::NumericVector lambda_1_all, Rcpp::NumericVector lambda_2_all, VectorXd pfacd, double step_sized, int niter, double linesearch_betad, double eps);
+RcppExport SEXP _proxgpu_solve_path(SEXP XdSEXP, SEXP statusdSEXP, SEXP rankminSEXP, SEXP rankmaxSEXP, SEXP order_matSEXP, SEXP rev_order_matSEXP, SEXP B0dSEXP, SEXP lambda_1_allSEXP, SEXP lambda_2_allSEXP, SEXP pfacdSEXP, SEXP step_sizedSEXP, SEXP niterSEXP, SEXP linesearch_betadSEXP, SEXP epsSEXP) {
 BEGIN_RCPP
     Rcpp::RObject rcpp_result_gen;
     Rcpp::RNGScope rcpp_rngScope_gen;
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type X(XSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type status(statusSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type Xd(XdSEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type statusd(statusdSEXP);
     Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type rankmin(rankminSEXP);
     Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type rankmax(rankmaxSEXP);
     Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type order_mat(order_matSEXP);
     Rcpp::traits::input_parameter< Rcpp::IntegerMatrix >::type rev_order_mat(rev_order_matSEXP);
-    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type B0(B0SEXP);
+    Rcpp::traits::input_parameter< Rcpp::NumericMatrix >::type B0d(B0dSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type lambda_1_all(lambda_1_allSEXP);
     Rcpp::traits::input_parameter< Rcpp::NumericVector >::type lambda_2_all(lambda_2_allSEXP);
-    Rcpp::traits::input_parameter< VectorXd >::type pfac(pfacSEXP);
-    Rcpp::traits::input_parameter< double >::type step_size(step_sizeSEXP);
+    Rcpp::traits::input_parameter< VectorXd >::type pfacd(pfacdSEXP);
+    Rcpp::traits::input_parameter< double >::type step_sized(step_sizedSEXP);
     Rcpp::traits::input_parameter< int >::type niter(niterSEXP);
-    Rcpp::traits::input_parameter< double >::type linesearch_beta(linesearch_betaSEXP);
+    Rcpp::traits::input_parameter< double >::type linesearch_betad(linesearch_betadSEXP);
     Rcpp::traits::input_parameter< double >::type eps(epsSEXP);
-    rcpp_result_gen = Rcpp::wrap(solve_path(X, status, rankmin, rankmax, order_mat, rev_order_mat, B0, lambda_1_all, lambda_2_all, pfac, step_size, niter, linesearch_beta, eps));
+    rcpp_result_gen = Rcpp::wrap(solve_path(Xd, statusd, rankmin, rankmax, order_mat, rev_order_mat, B0d, lambda_1_all, lambda_2_all, pfacd, step_sized, niter, linesearch_betad, eps));
     return rcpp_result_gen;
 END_RCPP
 }

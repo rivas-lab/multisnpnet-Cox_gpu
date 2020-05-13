@@ -120,7 +120,7 @@ void compute_product(numeric *A, numeric *B, numeric *C,
     numeric beta = 0.0;
     cublasSetStream(handle, stream);
     int lda = (trans == CUBLAS_OP_N)?N:p;
-    cublasDgemm(handle, trans, CUBLAS_OP_N, 
+    cublasSgemm(handle, trans, CUBLAS_OP_N, 
                 N, K, p, &alpha, 
                 A, lda, B, p, &beta, C, N);
 }
@@ -446,7 +446,7 @@ void nesterov_update(cox_param &dev_param, uint32_t K, uint32_t p, numeric weigh
     numeric alpha =  (weight_old - 1)/weight_new + 1;
     numeric beta = (1 - weight_old)/weight_new;
     cublasSetStream(handle, stream);
-    cublasDgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, p, K, &alpha, dev_param.B, p , &beta, dev_param.prev_B, p, dev_param.v, p);
+    cublasSgeam(handle, CUBLAS_OP_N, CUBLAS_OP_N, p, K, &alpha, dev_param.B, p , &beta, dev_param.prev_B, p, dev_param.v, p);
 }
 
 
@@ -502,7 +502,7 @@ numeric max_diff(cox_param &dev_param, uint32_t K, uint32_t p)
 void cublas_copy(numeric *A, numeric *B, uint32_t len, cudaStream_t stream, cublasHandle_t handle)
 {
     cublasSetStream(handle, stream);
-    cublasDcopy(handle, len,A, 1,B, 1);
+    cublasScopy(handle, len,A, 1,B, 1);
 }
 
 
@@ -513,6 +513,5 @@ void permute_by_order(numeric *x, numeric *y, int *o, uint32_t len, cudaStream_t
     thrust::device_ptr<int> dptr_o = thrust::device_pointer_cast<int>(o);
     PermIter iter(dptr_x, dptr_o);
     thrust::copy_n(thrust::cuda::par.on(stream), iter, len, y);
-
 
 }

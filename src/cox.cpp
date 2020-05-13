@@ -101,26 +101,38 @@ numeric get_gradient(cox_cache &dev_cache,
 
 
 // [[Rcpp::export]]
-Rcpp::List solve_path(Rcpp::NumericMatrix X,
-                       Rcpp::NumericMatrix status,
+Rcpp::List solve_path(Rcpp::NumericMatrix Xd,
+                       Rcpp::NumericMatrix statusd,
                        Rcpp::IntegerMatrix rankmin,
                        Rcpp::IntegerMatrix rankmax,
                        Rcpp::IntegerMatrix order_mat,
                        Rcpp::IntegerMatrix rev_order_mat,
-                       Rcpp::NumericMatrix B0,
+                       Rcpp::NumericMatrix B0d,
                        Rcpp::NumericVector lambda_1_all,
                        Rcpp::NumericVector lambda_2_all,
-                       VectorXd pfac,
-                       double step_size = 1.0,
+                       VectorXd pfacd,
+                       double step_sized = 1.0,
                        int niter=2000,
-                       double linesearch_beta = 1.1,
+                       double linesearch_betad = 1.1,
                        double eps=1e-5 // convergence criteria
                        )
 {
     // B is a long and skinny matrix now! rows are features and cols are responses
-    const uint32_t p = B0.rows();
-    const uint32_t K = B0.cols();
-    const uint32_t N = X.rows();
+    const uint32_t p = B0d.rows();
+    const uint32_t K = B0d.cols();
+    const uint32_t N = Xd.rows();
+
+    // Cast X, B0, status to float
+    MapMatd Xmap(&Xd(0,0), N, p);
+    MapMatd Bmap(&B0d(0,0), p, K);
+    MapMatd statusmap(&statusd(0,0), N, K);
+    MatrixXf X(Xmap.cast<numeric>());
+    MatrixXf B0(Bmap.cast<numeric>());
+    MatrixXf status(statusmap.cast<numeric>());
+    VectorXf pfac(pfacd.cast<numeric>());
+
+    numeric linesearch_beta = (numeric)linesearch_betad;
+
     // Create CUDA streams and handle
     cublasHandle_t handle;
     cublasCreate(&handle);
@@ -142,7 +154,7 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
     // Allocate host variables
     numeric *cox_val_host=(numeric *)malloc(sizeof(numeric)*K);
     numeric *cox_val_next_host=(numeric *)malloc(sizeof(numeric)*K);
-    MatrixXd host_B(p,K);
+    MatrixXf host_B(p,K);
 
 
 
@@ -180,7 +192,7 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
     numeric diff; // Max norm of the difference of two consecutive iterates
 
     const int num_lambda = lambda_1_all.size();
-    numeric step_size_intial = step_size;
+    numeric step_size_intial = (numeric)step_sized;
     Rcpp::List result(num_lambda);
     bool stop; // Stop line searching
     numeric value_change;
@@ -190,10 +202,10 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
     for (int lam_ind = 0; lam_ind < num_lambda; ++lam_ind){
         gettimeofday(&start, NULL);
 
-        numeric lambda_1 = lambda_1_all[lam_ind];
-        numeric lambda_2 = lambda_2_all[lam_ind];
+        numeric lambda_1 = (numeric)lambda_1_all[lam_ind];
+        numeric lambda_2 = (numeric)lambda_2_all[lam_ind];
         weight_old = 1.0;
-        step_size = step_size_intial;
+        numeric step_size = step_size_intial;
         cublas_copy(dev_param.B, dev_param.v, K*p, 0, handle);
         // Inner iteration
         for (int i = 0; i < niter; ++i)
@@ -292,7 +304,7 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
 
         }
         cudaMemcpy(&host_B(0,0), dev_param.B, sizeof(numeric)*K*p, cudaMemcpyDeviceToHost);
-        result[lam_ind] = host_B;
+        result[lam_ind] = host_B.cast<double>();
         std::cout << "Solution for the " <<  lam_ind+1 << "th lambda pair is obtained\n";
     }
 

@@ -19,6 +19,6 @@ typedef Eigen::VectorXi VectorXi;
 typedef Eigen::PermutationMatrix<Eigen::Dynamic,Eigen::Dynamic> PermMat;
 
 
-typedef double numeric;
+typedef float numeric;
 
 #endif
