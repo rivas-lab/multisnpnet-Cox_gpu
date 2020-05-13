@@ -149,9 +149,9 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
     score[which.in.model] <- NA
     sorted.score <- sort(score, decreasing = T, na.last = NA)
 
-    if(num_to_add > (6500 - length(covs))){
+    if(num_to_add > (12000 - length(covs))){
       warning("GPU memory limit will be reached, reduce number of variabels to add")
-      num_to_add = 6500 - length(covs)
+      num_to_add = 12000 - length(covs)
     }
     features.to.add <- names(sorted.score)[1:min(num_to_add, length(sorted.score))]
     covs = c(covs, features.to.add)
