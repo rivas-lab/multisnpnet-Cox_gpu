@@ -10,14 +10,13 @@
 numeric get_value_only(cox_cache &dev_cache,
                   cox_data &dev_data,
                   numeric *B, // B is a device pointer
-                  MatrixXd & host_cache, // Used to store eta, residual to reorder
+                  uint32_t N,
+                  uint32_t K,
                   uint32_t p,
                   cublasHandle_t handle,
                   cudaStream_t *copy_stream,
                   numeric *cox_val_host)
 {
-    uint32_t N = host_cache.rows();
-    uint32_t K = host_cache.cols();
     compute_product(dev_data.X, B, dev_cache.order_cache, N, p, K, 0, handle, CUBLAS_OP_N);
     for(uint32_t k = 0; k< K; ++k){
         permute_by_order(dev_cache.order_cache + k*N, dev_cache.eta+k*N, dev_data.order+k*N, N, copy_stream[k]);
@@ -48,15 +47,14 @@ numeric get_gradient(cox_cache &dev_cache,
                   cox_data &dev_data,
                   numeric *dev_grad,
                   numeric *B, // B is a device pointer
-                  MatrixXd & host_cache, // Used to store eta, residual to reorder
+                  uint32_t N,
+                  uint32_t K,
                   uint32_t p,
                   cublasHandle_t handle,
                   cudaStream_t *copy_stream,
                   bool get_val = false,
                   numeric *cox_val_host=0)
 {
-    uint32_t N = host_cache.rows();
-    uint32_t K = host_cache.cols();
     compute_product(dev_data.X, B, dev_cache.order_cache, N, p, K, 0, handle, CUBLAS_OP_N);
     for(uint32_t k = 0; k< K; ++k){
         permute_by_order(dev_cache.order_cache + k*N, dev_cache.eta+k*N, dev_data.order+k*N, N, copy_stream[k]);
@@ -84,7 +82,7 @@ numeric get_gradient(cox_cache &dev_cache,
     for(uint32_t k = 0; k< K; ++k){
         permute_by_order(dev_cache.order_cache + k*N, dev_cache.residual+k*N, dev_data.rev_order+k*N, N, copy_stream[k]);
     }
-    // reiduals ready, and stored in host_cache, now we can get gradient
+    // reiduals ready,now we can get gradient
     compute_product(dev_data.X, dev_cache.residual, dev_grad, p, N, K, 0,handle, CUBLAS_OP_T);
     numeric val = 0.0;
     if(get_val){
@@ -145,7 +143,6 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
     numeric *cox_val_host=(numeric *)malloc(sizeof(numeric)*K);
     numeric *cox_val_next_host=(numeric *)malloc(sizeof(numeric)*K);
     MatrixXd host_B(p,K);
-    MatrixXd host_cache(N, K); // This will hold the vectors that needs to be reordered and the residuals
 
 
 
@@ -211,7 +208,8 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
                                     dev_data,
                                     dev_param.grad,
                                     dev_param.v, // B is a device pointer
-                                    host_cache, // Used to store eta, residual to reorder
+                                    N,
+                                    K,
                                     p,
                                     handle,
                                     copy_stream,
@@ -232,7 +230,8 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
                 cox_val_next = get_value_only(dev_cache,
                                                 dev_data,
                                                 dev_param.B, // B is a device pointer
-                                                host_cache, // Used to store eta, residual to reorder
+                                                N,
+                                                K,
                                                 p,
                                                 handle,
                                                 copy_stream,
