@@ -41,41 +41,41 @@ typedef struct cox_param{
 
 } cox_param;
 
-void allocate_device_memory(cox_data &dev_data, cox_cache &dev_cache, cox_param &dev_param, int total_cases, int K, int p);
+void allocate_device_memory(cox_data &dev_data, cox_cache &dev_cache, cox_param &dev_param, uint32_t total_cases, uint32_t K, uint32_t p);
 
 void free_device_memory(cox_data &dev_data, cox_cache &dev_cache, cox_param &dev_param);
 
 // Compute trans(A)*B and save the result to C, trans(A) is N by p, B is p by K
 void compute_product(numeric *A, numeric *B, numeric *C, 
-                     int N, int p, int K, cudaStream_t stream, cublasHandle_t handle, cublasOperation_t trans);
+                     uint32_t N, uint32_t p, uint32_t K, cudaStream_t stream, cublasHandle_t handle, cublasOperation_t trans);
 
-void apply_exp(const numeric *x, numeric *ex, int len, cudaStream_t stream);
-void rev_cumsum(numeric *x, numeric *y, int len, cudaStream_t stream);
-void adjust_ties(const numeric *x, const int *rank, numeric *y, int len , cudaStream_t stream);
-void cwise_div(const numeric *x, const numeric *y, numeric *z, int len, cudaStream_t stream);
-void cumsum(numeric *x, int len, cudaStream_t stream);
+void apply_exp(const numeric *x, numeric *ex, uint32_t len, cudaStream_t stream);
+void rev_cumsum(numeric *x, numeric *y, uint32_t len, cudaStream_t stream);
+void adjust_ties(const numeric *x, const int *rank, numeric *y, uint32_t len , cudaStream_t stream);
+void cwise_div(const numeric *x, const numeric *y, numeric *z, uint32_t len, cudaStream_t stream);
+void cumsum(numeric *x, uint32_t len, cudaStream_t stream);
 
-void mult_add(numeric *z, const numeric *a, const numeric *b, const numeric *c, int len,cudaStream_t stream);
+void mult_add(numeric *z, const numeric *a, const numeric *b, const numeric *c, uint32_t len,cudaStream_t stream);
 
-void get_coxvalue(const numeric *x, numeric *y, const numeric *z, numeric *val, int len, cudaStream_t stream);
+void get_coxvalue(const numeric *x, numeric *y, const numeric *z, numeric *val, uint32_t len, cudaStream_t stream);
 
 void update_parameters(cox_param &dev_param,
-                       int K,
-                       int p,
+                       uint32_t K,
+                       uint32_t p,
                        numeric step_size,
                        numeric lambda_1,
                        numeric lambda_2);
 
-numeric ls_stop_v1(cox_param &dev_param, numeric step_size, int K, int p);
+numeric ls_stop_v1(cox_param &dev_param, numeric step_size, uint32_t K, uint32_t p);
 
-numeric ls_stop_v2(cox_param &dev_param, numeric step_size, int K, int p);
+numeric ls_stop_v2(cox_param &dev_param, numeric step_size, uint32_t K, uint32_t p);
 
-void nesterov_update(cox_param &dev_param, int K, int p, numeric weight_old, numeric weight_new, cudaStream_t stream, cublasHandle_t handle);
+void nesterov_update(cox_param &dev_param, uint32_t K, uint32_t p, numeric weight_old, numeric weight_new, cudaStream_t stream, cublasHandle_t handle);
 
-numeric max_diff(cox_param &dev_param, int K, int p);
+numeric max_diff(cox_param &dev_param, uint32_t K, uint32_t p);
 
-void cublas_copy(numeric *A, numeric *B, int len, cudaStream_t stream, cublasHandle_t handle);
+void cublas_copy(numeric *A, numeric *B, uint32_t len, cudaStream_t stream, cublasHandle_t handle);
 
 // Set y = x[o];
-void permute_by_order(numeric *x, numeric *y, int *o, int len, cudaStream_t stream);
+void permute_by_order(numeric *x, numeric *y, int *o, uint32_t len, cudaStream_t stream);
 #endif

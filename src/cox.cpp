@@ -9,23 +9,22 @@
 // Compute the gradient at B
 numeric get_value_only(cox_cache &dev_cache,
                   cox_data &dev_data,
-                  cox_param &dev_param,
                   numeric *B, // B is a device pointer
                   MatrixXd & host_cache, // Used to store eta, residual to reorder
-                  int p,
+                  uint32_t p,
                   cublasHandle_t handle,
                   cudaStream_t *copy_stream,
                   numeric *cox_val_host)
 {
-    int N = host_cache.rows();
-    int K = host_cache.cols();
+    uint32_t N = host_cache.rows();
+    uint32_t K = host_cache.cols();
     compute_product(dev_data.X, B, dev_cache.order_cache, N, p, K, 0, handle, CUBLAS_OP_N);
-    for(int k = 0; k< K; ++k){
+    for(uint32_t k = 0; k< K; ++k){
         permute_by_order(dev_cache.order_cache + k*N, dev_cache.eta+k*N, dev_data.order+k*N, N, copy_stream[k]);
     }
     cudaDeviceSynchronize();
     apply_exp(dev_cache.eta, dev_cache.exp_eta, N*K, 0);
-    for(int k = 0; k < K; ++k){
+    for(uint32_t k = 0; k < K; ++k){
         // Save rev_cumsum result to dev_cache.outer_accumu to avoid more cache variables
         rev_cumsum(dev_cache.exp_eta+k*N, dev_cache.outer_accumu+k*N ,N, copy_stream[k]);
         adjust_ties(dev_cache.outer_accumu+k*N, dev_data.rankmin+k*N, dev_cache.exp_accumu+k*N, N, copy_stream[k]);
@@ -35,7 +34,7 @@ numeric get_value_only(cox_cache &dev_cache,
     }
     numeric val =  0.0;
     cudaDeviceSynchronize();
-    for(int k = 0; k < K; ++k)
+    for(uint32_t k = 0; k < K; ++k)
     {
         val += cox_val_host[k];
     }
@@ -47,25 +46,24 @@ numeric get_value_only(cox_cache &dev_cache,
 // Compute the gradient at B and save the result to dev_grad
 numeric get_gradient(cox_cache &dev_cache,
                   cox_data &dev_data,
-                  cox_param &dev_param,
                   numeric *dev_grad,
                   numeric *B, // B is a device pointer
                   MatrixXd & host_cache, // Used to store eta, residual to reorder
-                  int p,
+                  uint32_t p,
                   cublasHandle_t handle,
                   cudaStream_t *copy_stream,
                   bool get_val = false,
                   numeric *cox_val_host=0)
 {
-    int N = host_cache.rows();
-    int K = host_cache.cols();
+    uint32_t N = host_cache.rows();
+    uint32_t K = host_cache.cols();
     compute_product(dev_data.X, B, dev_cache.order_cache, N, p, K, 0, handle, CUBLAS_OP_N);
-    for(int k = 0; k< K; ++k){
+    for(uint32_t k = 0; k< K; ++k){
         permute_by_order(dev_cache.order_cache + k*N, dev_cache.eta+k*N, dev_data.order+k*N, N, copy_stream[k]);
     }
     cudaDeviceSynchronize();
     apply_exp(dev_cache.eta, dev_cache.exp_eta, N*K, 0);
-    for(int k = 0; k < K; ++k){
+    for(uint32_t k = 0; k < K; ++k){
         // Save rev_cumsum result to dev_cache.outer_accumu to avoid more cache variables
         rev_cumsum(dev_cache.exp_eta+k*N, dev_cache.outer_accumu+k*N ,N, copy_stream[k]);
         adjust_ties(dev_cache.outer_accumu+k*N, dev_data.rankmin+k*N, dev_cache.exp_accumu+k*N, N, copy_stream[k]);
@@ -76,26 +74,26 @@ numeric get_gradient(cox_cache &dev_cache,
     // Save the result of division to residual to avoid more cache variables
     cwise_div(dev_data.status, dev_cache.exp_accumu, dev_cache.residual,  N*K, 0);
 
-    for(int k = 0; k < K; ++k){
+    for(uint32_t k = 0; k < K; ++k){
         cumsum(dev_cache.residual+k*N, N, copy_stream[k]);
         adjust_ties(dev_cache.residual+k*N, dev_data.rankmax+k*N, dev_cache.outer_accumu+k*N, N, copy_stream[k]);
     }
     cudaDeviceSynchronize();
     mult_add(dev_cache.order_cache, dev_cache.exp_eta, dev_cache.outer_accumu, dev_data.status, N*K, 0);
     // residuals almost ready, need to reorder them:
-    for(int k = 0; k< K; ++k){
+    for(uint32_t k = 0; k< K; ++k){
         permute_by_order(dev_cache.order_cache + k*N, dev_cache.residual+k*N, dev_data.rev_order+k*N, N, copy_stream[k]);
     }
     // reiduals ready, and stored in host_cache, now we can get gradient
     compute_product(dev_data.X, dev_cache.residual, dev_grad, p, N, K, 0,handle, CUBLAS_OP_T);
     numeric val = 0.0;
     if(get_val){
-        for(int k = 0; k < K; ++k){
+        for(uint32_t k = 0; k < K; ++k){
             get_coxvalue(dev_cache.exp_accumu+k*N, dev_cache.eta+k*N, dev_data.status+k*N, dev_cache.cox_val+k, N, copy_stream[k]);
             cudaMemcpyAsync(cox_val_host+k, dev_cache.cox_val+k, sizeof(numeric)*1, cudaMemcpyDeviceToHost, copy_stream[k]);
         }
         cudaDeviceSynchronize();
-        for(int k = 0; k < K; ++k)
+        for(uint32_t k = 0; k < K; ++k)
         {
             val += cox_val_host[k];
         }
@@ -122,9 +120,9 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
                        )
 {
     // B is a long and skinny matrix now! rows are features and cols are responses
-    const int p = B0.rows();
-    const int K = B0.cols();
-    const int N = X.rows();
+    const uint32_t p = B0.rows();
+    const uint32_t K = B0.cols();
+    const uint32_t N = X.rows();
     // Create CUDA streams and handle
     cublasHandle_t handle;
     cublasCreate(&handle);
@@ -133,7 +131,7 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
     
     // Use these streams to copy data to device
     cudaStream_t *copy_stream = (cudaStream_t *) malloc(K * sizeof(cudaStream_t));
-    for (int k = 0; k<K; ++k)
+    for (uint32_t k = 0; k<K; ++k)
     {
         cudaStreamCreate(&copy_stream[k]);
     }
@@ -145,6 +143,7 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
 
     // Allocate host variables
     numeric *cox_val_host=(numeric *)malloc(sizeof(numeric)*K);
+    numeric *cox_val_next_host=(numeric *)malloc(sizeof(numeric)*K);
     MatrixXd host_B(p,K);
     MatrixXd host_cache(N, K); // This will hold the vectors that needs to be reordered and the residuals
 
@@ -182,8 +181,7 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
     numeric cox_val_next;
     numeric rhs_ls; // right-hand side of line search condition
     numeric diff; // Max norm of the difference of two consecutive iterates
-    numeric lambda_1;
-    numeric lambda_2;
+
     const int num_lambda = lambda_1_all.size();
     numeric step_size_intial = step_size;
     Rcpp::List result(num_lambda);
@@ -195,8 +193,8 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
     for (int lam_ind = 0; lam_ind < num_lambda; ++lam_ind){
         gettimeofday(&start, NULL);
 
-        lambda_1 = lambda_1_all[lam_ind];
-        lambda_2 = lambda_2_all[lam_ind];
+        numeric lambda_1 = lambda_1_all[lam_ind];
+        numeric lambda_2 = lambda_2_all[lam_ind];
         weight_old = 1.0;
         step_size = step_size_intial;
         cublas_copy(dev_param.B, dev_param.v, K*p, 0, handle);
@@ -211,7 +209,6 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
             // Update the gradient at v, compute cox_val at v
             cox_val = get_gradient(dev_cache,
                                     dev_data,
-                                    dev_param,
                                     dev_param.grad,
                                     dev_param.v, // B is a device pointer
                                     host_cache, // Used to store eta, residual to reorder
@@ -234,7 +231,6 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
                 // Get cox_val at updated B
                 cox_val_next = get_value_only(dev_cache,
                                                 dev_data,
-                                                dev_param,
                                                 dev_param.B, // B is a device pointer
                                                 host_cache, // Used to store eta, residual to reorder
                                                 p,
@@ -259,19 +255,19 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
                 step_size /= linesearch_beta;
             }
 
-            diff = max_diff(dev_param, K, p);
-            if (diff < eps)
-            {
-                std::cout << "convergence based on parameter change reached in " << i <<" iterations\n";
-                std::cout << "current step size is " << step_size << std::endl;
-                gettimeofday(&end, NULL);
-                double delta  = ((end.tv_sec  - start.tv_sec) * 1000000u + end.tv_usec - start.tv_usec) / 1.e6;
-                std::cout <<  "elapsed time is " << delta << " seconds" << std::endl;
-                Rcpp::checkUserInterrupt();
-                break;
-            }
+            // diff = max_diff(dev_param, K, p);
+            // if (diff < eps)
+            // {
+            //     std::cout << "convergence based on parameter change reached in " << i <<" iterations\n";
+            //     std::cout << "current step size is " << step_size << std::endl;
+            //     gettimeofday(&end, NULL);
+            //     double delta  = ((end.tv_sec  - start.tv_sec) * 1000000u + end.tv_usec - start.tv_usec) / 1.e6;
+            //     std::cout <<  "elapsed time is " << delta << " seconds" << std::endl;
+            //     Rcpp::checkUserInterrupt();
+            //     break;
+            // }
 
-            if(value_change < 1e-10){
+            if(value_change < 5e-7){
                 std::cout << "convergence based on value change reached in " << i <<" iterations\n";
                 std::cout << "current step size is " << step_size << std::endl;
                 gettimeofday(&end, NULL);
@@ -306,11 +302,12 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
 
     free_device_memory(dev_data, dev_cache, dev_param);
     cublasDestroy(handle);
-    for (int si = 0; si< K;++si){
+    for (uint32_t si = 0; si< K;++si){
         cudaStreamDestroy(copy_stream[si]);
     }
     cudaStreamDestroy(nest_stream);
     free(copy_stream);
     free(cox_val_host);
+    free(cox_val_next_host);
     return result;
 }

@@ -14,7 +14,8 @@ solve_aligned_gpu = function(X, y_list, status_list, lambda_1, lambda_2, p.fac=N
     y = y[o]
     order_mat[,k] = o - 1L
     rev_order_mat[,k] = order(o) - 1L
-    status[,k] = status_list[[k]][o]/N # use this vector to control the weight
+    #status[,k] = status_list[[k]][o]/N # use this vector to control the weight
+    status[,k] = status_list[[k]][o]/sum(status_list[[k]])
     rankmin[,k] = rank(y, ties.method="min") - 1L
     rankmax[,k] = rank(y, ties.method="min") - 1L    
   }

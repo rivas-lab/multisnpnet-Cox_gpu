@@ -30,7 +30,7 @@ all : rcppcuda.so
 rcppcuda.so: $(OBJECTS)
 
 %.o: %.cpp $(cpp_sources)
-	$(CXX) $< -c -fPIC -I$(R_INC) -I$(RCPP_INC) -I$(EIGEN_INC) -I$(CUDA_INC) -I/usr/include -I$(CUDA_HOME)/samples/common/inc -Wno-ignored-attributes
+	$(CXX) $< -c -fPIC -I$(R_INC) -I$(RCPP_INC) -I$(EIGEN_INC) -I$(CUDA_INC) -I/usr/include -I$(CUDA_HOME)/samples/common/inc -Wno-ignored-attributes -Wall -Wextra
 
 %.o: %.cu $(cu_sources)
 	$(NVCC) $(NVCC_FLAGS) -I$(CUDA_INC) -I$(EIGEN_INC) -I$(RCPP_INC) -I$(CUDA_HOME)/samples/common/inc $< -c

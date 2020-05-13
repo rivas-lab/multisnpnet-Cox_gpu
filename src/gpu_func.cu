@@ -14,7 +14,7 @@ typedef thrust::permutation_iterator<Iterator, IndexIterator> PermIter;
 
 #define MAX_THREAD_PER_BLOCK 1024
 
-void allocate_device_memory(cox_data &dev_data, cox_cache &dev_cache, cox_param &dev_param, int total_cases, int K, int p)
+void allocate_device_memory(cox_data &dev_data, cox_cache &dev_cache, cox_param &dev_param, uint32_t total_cases, uint32_t K, uint32_t p)
 {
     cudaMalloc((void**)&dev_data.X, sizeof(numeric) *p * total_cases);
     cudaMalloc((void**)&dev_data.status, sizeof(numeric)  * total_cases*K);
@@ -114,7 +114,7 @@ __device__ __forceinline__ float atomicMax(float *address, float val)
 
 
 void compute_product(numeric *A, numeric *B, numeric *C, 
-    int N, int p, int K, cudaStream_t stream, cublasHandle_t handle, cublasOperation_t trans=CUBLAS_OP_N)
+    uint32_t N, uint32_t p, uint32_t K, cudaStream_t stream, cublasHandle_t handle, cublasOperation_t trans=CUBLAS_OP_N)
 {
     numeric alpha = 1.0;
     numeric beta = 0.0;
@@ -126,16 +126,16 @@ void compute_product(numeric *A, numeric *B, numeric *C,
 }
 
 __global__
-void apply_exp_gpu(const numeric *x, numeric *ex, int len)
+void apply_exp_gpu(const numeric *x, numeric *ex, uint32_t len)
 {
-    int tid = blockDim.x * blockIdx.x + threadIdx.x;
+    uint32_t tid = blockDim.x * blockIdx.x + threadIdx.x;
     if(tid < len)
     {
         ex[tid] = exp(x[tid]);
     }
 }
 
-void apply_exp(const numeric *x, numeric *ex, int len, cudaStream_t stream)
+void apply_exp(const numeric *x, numeric *ex, uint32_t len, cudaStream_t stream)
 {
     constexpr int num_thread = 128;
     int num_block = (len + num_thread - 1)/num_thread;
@@ -143,7 +143,7 @@ void apply_exp(const numeric *x, numeric *ex, int len, cudaStream_t stream)
 }
 
 // do rev_cumsum of x and save it to y
-void rev_cumsum(numeric *x, numeric *y, int len, cudaStream_t stream)
+void rev_cumsum(numeric *x, numeric *y, uint32_t len, cudaStream_t stream)
 {
     thrust::device_ptr<numeric> dptr_x = thrust::device_pointer_cast<numeric>(x);
     thrust::reverse_iterator<Iterator> r_x = make_reverse_iterator(dptr_x+len);
@@ -154,9 +154,9 @@ void rev_cumsum(numeric *x, numeric *y, int len, cudaStream_t stream)
 }
 
 __global__
-void adjust_ties_gpu(const numeric *x, const int *rank, numeric *y, int len)
+void adjust_ties_gpu(const numeric *x, const int *rank, numeric *y, uint32_t len)
 {
-    int tid = blockDim.x * blockIdx.x + threadIdx.x;
+    uint32_t tid = blockDim.x * blockIdx.x + threadIdx.x;
     if(tid < len)
     {
         y[tid] = x[rank[tid]];
@@ -165,7 +165,7 @@ void adjust_ties_gpu(const numeric *x, const int *rank, numeric *y, int len)
 }
 
 // adjust rank of x and save it to y
-void adjust_ties(const numeric *x, const int *rank, numeric *y, int len , cudaStream_t stream)
+void adjust_ties(const numeric *x, const int *rank, numeric *y, uint32_t len , cudaStream_t stream)
 {
     constexpr int num_thread = 128;
     int num_block = (len + num_thread - 1)/num_thread;
@@ -174,9 +174,9 @@ void adjust_ties(const numeric *x, const int *rank, numeric *y, int len , cudaSt
 
 
 __global__
-void cwise_div_gpu(const numeric *x, const  numeric *y, numeric *z, int len)
+void cwise_div_gpu(const numeric *x, const  numeric *y, numeric *z, uint32_t len)
 {
-    int tid = blockDim.x * blockIdx.x + threadIdx.x;
+    uint32_t tid = blockDim.x * blockIdx.x + threadIdx.x;
     if(tid < len)
     {
         z[tid] = x[tid]/y[tid];
@@ -186,14 +186,14 @@ void cwise_div_gpu(const numeric *x, const  numeric *y, numeric *z, int len)
 
 
 // Compute x./y and save the result to z
-void cwise_div(const numeric *x, const numeric *y, numeric *z, int len, cudaStream_t stream)
+void cwise_div(const numeric *x, const numeric *y, numeric *z, uint32_t len, cudaStream_t stream)
 {
     constexpr int num_thread = 128;
     int num_block = (len + num_thread - 1)/num_thread;
     cwise_div_gpu<<<num_block, num_thread, 0, stream>>>(x, y, z, len);
 }
 
-void cumsum(numeric *x, int len, cudaStream_t stream)
+void cumsum(numeric *x, uint32_t len, cudaStream_t stream)
 {
     thrust::device_ptr<numeric> dev_ptr = thrust::device_pointer_cast(x);
     thrust::inclusive_scan(thrust::cuda::par.on(stream), dev_ptr, dev_ptr+len, dev_ptr);
@@ -201,9 +201,9 @@ void cumsum(numeric *x, int len, cudaStream_t stream)
 
 
 __global__
-void mult_add_gpu(numeric *z, const numeric *a, const numeric *b, const numeric *c, int len)
+void mult_add_gpu(numeric *z, const numeric *a, const numeric *b, const numeric *c, uint32_t len)
 {
-    int tid = blockDim.x * blockIdx.x + threadIdx.x;
+    uint32_t tid = blockDim.x * blockIdx.x + threadIdx.x;
     if(tid < len)
     {
         z[tid] = a[tid] * b[tid] - c[tid];
@@ -213,7 +213,7 @@ void mult_add_gpu(numeric *z, const numeric *a, const numeric *b, const numeric 
 
 
 // Set z = a*b - c
-void mult_add(numeric *z, const numeric *a, const numeric *b, const numeric *c, int len,cudaStream_t stream)
+void mult_add(numeric *z, const numeric *a, const numeric *b, const numeric *c, uint32_t len,cudaStream_t stream)
 {
     constexpr int num_thread = 128;
     int num_block = (len + num_thread - 1)/num_thread;
@@ -222,9 +222,9 @@ void mult_add(numeric *z, const numeric *a, const numeric *b, const numeric *c, 
 
 
 __global__
-void coxval_gpu(const numeric *x, numeric *y, const numeric *z, numeric *val, int len)
+void coxval_gpu(const numeric *x, numeric *y, const numeric *z, numeric *val, uint32_t len)
 {
-    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    uint32_t i = blockIdx.x*blockDim.x + threadIdx.x;
     if(i==0){
         val[0] = 0.0;
     }
@@ -259,7 +259,7 @@ void coxval_gpu(const numeric *x, numeric *y, const numeric *z, numeric *val, in
 
 
 // compute sum((log(x) - y) *z), x will be modified, result saved in val
-void get_coxvalue(const numeric *x, numeric *y, const  numeric *z, numeric *val, int len, cudaStream_t stream)
+void get_coxvalue(const numeric *x, numeric *y, const  numeric *z, numeric *val, uint32_t len, cudaStream_t stream)
 {
     constexpr int num_thread = 128;
     int num_block = (len + num_thread - 1)/num_thread;
@@ -268,18 +268,18 @@ void get_coxvalue(const numeric *x, numeric *y, const  numeric *z, numeric *val,
 
 __global__
 void update_parameters_gpu(numeric *B, const numeric *v, const numeric *g, const numeric *penalty_factor,
-                           int K, int p,numeric step_size, numeric lambda_1, numeric lambda_2)
+    uint32_t K, uint32_t p,numeric step_size, numeric lambda_1, numeric lambda_2)
 {
-    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    uint32_t i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i < p)
     {
         numeric ba;
         numeric lambdap1 = lambda_1*penalty_factor[i]*step_size;
         numeric lambdap2 = lambda_2*penalty_factor[i]*step_size;
         numeric norm = 0.0;
-        for (int k = 0; k <K; ++k)
+        for (uint32_t k = 0; k <K; ++k)
         {
-            int ind = i+k*p;
+            uint32_t ind = i+k*p;
             // gradient  descent
             B[ind] = v[ind] - step_size*g[ind];
             //soft-thresholding
@@ -290,9 +290,9 @@ void update_parameters_gpu(numeric *B, const numeric *v, const numeric *g, const
         }
         // Group soft-thresholding
         norm = fmax(sqrt(norm), lambdap2);
-        for(int k = 0; k <K; ++k)
+        for(uint32_t k = 0; k <K; ++k)
         {
-            int ind = i+k*p;
+            uint32_t ind = i+k*p;
             B[ind] *= ((norm - lambdap2)/norm);
         }
 
@@ -302,8 +302,8 @@ void update_parameters_gpu(numeric *B, const numeric *v, const numeric *g, const
 
 
 void update_parameters(cox_param &dev_param,
-    int K,
-    int p,
+    uint32_t K,
+    uint32_t p,
     numeric step_size,
     numeric lambda_1,
     numeric lambda_2)
@@ -317,9 +317,9 @@ void update_parameters(cox_param &dev_param,
 
 
 __global__
-void ls_stop_v1_gpu(const numeric *B, const numeric *v, const numeric *g, numeric *result, int K, int p, numeric step_size)
+void ls_stop_v1_gpu(const numeric *B, const numeric *v, const numeric *g, numeric *result, uint32_t K, uint32_t p, numeric step_size)
 {
-    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    uint32_t i = blockIdx.x*blockDim.x + threadIdx.x;
     if(i==0){
         result[0] = 0.0;
     }
@@ -354,7 +354,7 @@ void ls_stop_v1_gpu(const numeric *B, const numeric *v, const numeric *g, numeri
 
 
 
-numeric ls_stop_v1(cox_param &dev_param, numeric step_size, int K, int p)
+numeric ls_stop_v1(cox_param &dev_param, numeric step_size, uint32_t K, uint32_t p)
 {
     constexpr int num_thread = 256;
     int num_block = (K*p + num_thread - 1)/num_thread;
@@ -367,9 +367,9 @@ numeric ls_stop_v1(cox_param &dev_param, numeric step_size, int K, int p)
 
 __global__
 void ls_stop_v2_gpu(const numeric *B, const numeric *v, const numeric *g, const numeric *g_ls,
-                    numeric *result, int K, int p, numeric step_size)
+                    numeric *result, uint32_t K, uint32_t p, numeric step_size)
 {
-    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    uint32_t i = blockIdx.x*blockDim.x + threadIdx.x;
     if(i<2){
         result[i] = 0.0;
     }
@@ -428,7 +428,7 @@ void ls_stop_v2_gpu(const numeric *B, const numeric *v, const numeric *g, const 
 
 
 
-numeric ls_stop_v2(cox_param &dev_param, numeric step_size, int K, int p)
+numeric ls_stop_v2(cox_param &dev_param, numeric step_size, uint32_t K, uint32_t p)
 {
     constexpr int num_thread = 256;
     int num_block = (K*p + num_thread - 1)/num_thread;
@@ -441,7 +441,7 @@ numeric ls_stop_v2(cox_param &dev_param, numeric step_size, int K, int p)
 }
 
 
-void nesterov_update(cox_param &dev_param, int K, int p, numeric weight_old, numeric weight_new, cudaStream_t stream, cublasHandle_t handle)
+void nesterov_update(cox_param &dev_param, uint32_t K, uint32_t p, numeric weight_old, numeric weight_new, cudaStream_t stream, cublasHandle_t handle)
 {
     numeric alpha =  (weight_old - 1)/weight_new + 1;
     numeric beta = (1 - weight_old)/weight_new;
@@ -451,9 +451,9 @@ void nesterov_update(cox_param &dev_param, int K, int p, numeric weight_old, num
 
 
 __global__
-void max_diff_gpu(numeric *A, numeric *B, numeric *result, int len)
+void max_diff_gpu(numeric *A, numeric *B, numeric *result, uint32_t len)
 {
-    int i = blockIdx.x*blockDim.x + threadIdx.x;
+    uint32_t i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i == 0)
     {
         result[0] = 0.0;
@@ -488,7 +488,7 @@ void max_diff_gpu(numeric *A, numeric *B, numeric *result, int len)
 
 }
 
-numeric max_diff(cox_param &dev_param, int K, int p)
+numeric max_diff(cox_param &dev_param, uint32_t K, uint32_t p)
 {
     constexpr int num_thread = 256;
     int num_block = (K*p + num_thread - 1)/num_thread;
@@ -499,14 +499,14 @@ numeric max_diff(cox_param &dev_param, int K, int p)
 }
 
 // Set B = A
-void cublas_copy(numeric *A, numeric *B, int len, cudaStream_t stream, cublasHandle_t handle)
+void cublas_copy(numeric *A, numeric *B, uint32_t len, cudaStream_t stream, cublasHandle_t handle)
 {
     cublasSetStream(handle, stream);
     cublasDcopy(handle, len,A, 1,B, 1);
 }
 
 
-void permute_by_order(numeric *x, numeric *y, int *o, int len, cudaStream_t stream)
+void permute_by_order(numeric *x, numeric *y, int *o, uint32_t len, cudaStream_t stream)
 {
     thrust::device_ptr<numeric> dptr_x = thrust::device_pointer_cast<numeric>(x);
     thrust::device_ptr<numeric> dptr_y = thrust::device_pointer_cast<numeric>(y);
