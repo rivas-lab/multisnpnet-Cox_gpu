@@ -59,8 +59,8 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
   rm(phe)
   
   ### Initialize train and validation C-index --------------------------------------------
-  Ctrain = matrix(nrow=K,ncol=nlambda)
-  Cval = matrix(nrow=K, ncol=nlambda)
+  Ctrain = matrix(-1, nrow=K, ncol=nlambda)
+  Cval = matrix(-1, nrow=K, ncol=nlambda)
   
   
   ### Read genotype files, copied from snpnet --------------------------------------------------
@@ -88,6 +88,8 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
   }
 
   result = solve_aligned_gpu(X,y_list, status_list, c(0.0), c(0.0))
+  residuals =  result[['residual']][[1]]
+  result = result[['result']]
 
   ### Compute CIndex ----------------------------------
   X_val = as.matrix(select(phe_val, all_of(covs)))
@@ -98,7 +100,6 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
   }
 
   ### Compute residuals and gradient-------------------------------
-  residuals = get_residual(X,y_list, status_list, result[[1]])
   residuals = matrix(residuals,nrow = length(phe_train$ID), ncol = K, dimnames = list(paste(phe_train$ID, phe_train$ID, sep='_'), 
                                                                                                paste0("lambda_0_k", 1:K)))
 
@@ -119,7 +120,10 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
   prev_valid_index = 0
 
   # Use validation C-index to determine early stop
-  max_cindex = mean(Cval[,1])
+  max_cindex = Cval[,1]
+  early_stop = rep(FALSE, K)
+  names(early_stop) = responsid
+  current_response = responsid
   out = list()
   out[[1]] = result[[1]]
   features.to.discard = NULL
@@ -141,7 +145,7 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
     if(length(features.to.discard) > 0){
         phe_train[, (features.to.discard) := NULL]
         phe_val[, (features.to.discard) := NULL]
-        current_B = current_B[!covs %in% features.to.discard, ]
+        current_B = current_B[!covs %in% features.to.discard, ,drop=F]
         covs = covs[!covs %in% features.to.discard] 
     }
     
@@ -149,9 +153,12 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
     score[which.in.model] <- NA
     sorted.score <- sort(score, decreasing = T, na.last = NA)
 
-    if(num_to_add > (12000 - length(covs))){
+    if(num_to_add > (16000 - length(covs))){
       warning("GPU memory limit will be reached, reduce number of variabels to add")
-      num_to_add = 12000 - length(covs)
+      num_to_add = max(16000 - length(covs),0)
+      if(num_to_add == 0){
+        stop("GPU memory limit reached.")
+      }
     }
     features.to.add <- names(sorted.score)[1:min(num_to_add, length(sorted.score))]
     covs = c(covs, features.to.add)
@@ -175,22 +182,23 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
     X = as.matrix(select(phe_train, all_of(covs)))
     result = solve_aligned_gpu(X,y_list, status_list, lambda_seq_local, lambda_seq_local*alpha, p.fac=p.fac, B0=B_init)
     
-    residual_all = list()
-    for(i in 1:length(result)){
-        residual_all[[i]] = get_residual(X,y_list, status_list, result[[i]])
-    }
+    residual_all = result[['residual']]
+    result = result[['result']]
+    # for(i in 1:length(result)){
+    #     residual_all[[i]] = get_residual(X,y_list, status_list, result[[i]])
+    # }
     residual_all = do.call(cbind, residual_all)
     residual_all = matrix(residual_all,nrow = length(phe_train$ID), ncol = K*num_lambda_per_iter, 
                           dimnames = list(paste(phe_train$ID, phe_train$ID, sep='_'), paste0("lambda_0_k", 1:(K*num_lambda_per_iter))))
     
     gradient = computeProduct(residual_all, genotype.pfile, vars, stats, configs, iter=iter)
-    gradient = gradient[-which(rownames(gradient) %in% stats$excludeSNP), ]
+    gradient = gradient[-which(rownames(gradient) %in% stats$excludeSNP), ,drop=F]
     
     dnorm_list = list()
     for(i in 1:length(result)){
         start = (i-1)*K+1
         end = i*K
-        grad_local = gradient[,start:end]
+        grad_local = gradient[,start:end, drop=F]
         dnorm_list[[i]] = get_dual_norm(grad_local, alpha)
     }
     
@@ -217,8 +225,9 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
             out[[max_valid_index+j]] = result[[j]]
             for(i in 1:K){
               beta = result[[j]][, i]
-              Ctrain[i,max_valid_index+j] = cindex::CIndex(X %*% beta, y_list[[i]], status_list[[i]])
-              Cval[i,max_valid_index+j] = cindex::CIndex(X_val %*% beta, phe_val[[responses[i]]], phe_val[[status[i]]])
+              ind = match(current_response[i], responsid)
+              Ctrain[ind,max_valid_index+j] = cindex::CIndex(X %*% beta, y_list[[i]], status_list[[i]])
+              Cval[ind,max_valid_index+j] = cindex::CIndex(X_val %*% beta, phe_val[[responses[i]]], phe_val[[status[i]]])
             }
         }
         # Save temp result to files
@@ -227,28 +236,62 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
                 file=file.path(configs[['save.dir']], paste0("saveresult", iter, ".RData")))
 
 
-        avg_Cval_this_iter = apply(Cval[,(max_valid_index + 1):(max_valid_index+local_valid), drop=F], 2, mean)
-        print(avg_Cval_this_iter)
-        max_cindex_this_iter = max(avg_Cval_this_iter)
-        if(max_cindex_this_iter >= max_cindex){
-          max_cindex = max_cindex_this_iter
-        } else{
+        max_Cval_this_iter = apply(Cval[,(max_valid_index + 1):(max_valid_index+local_valid), drop=F], 1, max)
+        last_Cval_this_iter = Cval[,(max_valid_index+local_valid)]
+        print(max_Cval_this_iter)
+        print(last_Cval_this_iter)
+        max_cindex = pmax(max_cindex, max_Cval_this_iter)
+        early_stop = early_stop | (last_Cval_this_iter < max_cindex)
+
+        if(all(early_stop)){
           print("Early stop reached")
           break
         }
-      
-        if(which.max(avg_Cval_this_iter) != length(avg_Cval_this_iter)){
-          print("early stop reached")
-          break            
+
+        # remove responses whose val Cindex decreases
+        if(sum(1-early_stop) < K){
+          print("let's remove some response!")
+          keep_ind = !(current_response %in% names(which(early_stop)))
+          gradient = gradient[,((local_valid - 1)*K+1):(local_valid*K), drop=F]
+          gradient = gradient[, keep_ind, drop=F]
+          print(keep_ind)
+          print(early_stop)
+          responses = responses[keep_ind]
+          status = status[keep_ind]
+          y_list = y_list[keep_ind]
+          status_list =  status_list[keep_ind]
+          current_B = result[[local_valid]][,keep_ind, drop=F]
+          K = sum(1-early_stop)
+          alpha = sqrt(K)
+          current_response = responsid[!early_stop]
+          score = get_dual_norm(gradient, alpha)
+        } else {
+          score =  dnorm_list[[local_valid]]
+          current_B = result[[local_valid]]
         }
+        print(paste("current number of reponses", K))
+
+
+        
+
+        # max_cindex_this_iter = max(avg_Cval_this_iter)
+        # if(max_cindex_this_iter >= max_cindex){
+        #   max_cindex = max_cindex_this_iter
+        # } else{
+        #   print("Early stop reached")
+        #   break
+        # }
+      
+        # if(which.max(avg_Cval_this_iter) != length(avg_Cval_this_iter)){
+        #   print("early stop reached")
+        #   break            
+        # }
       
         
         max_valid_index = max_valid_index + local_valid
         new.active = lapply(result, function(x){ which(apply(abs(x), 1, function(y){sum(y)!=0}))})
         ever.active <- union(ever.active, covs[unique(unlist(new.active))])
         features.to.discard = setdiff(covs, ever.active)
-        score =  dnorm_list[[local_valid]]
-        current_B = result[[local_valid]]
         print(paste("Number of features discarded in this iteration is", length(features.to.discard)))
         print(paste("Number of ever active variables is", length(ever.active)))
     }

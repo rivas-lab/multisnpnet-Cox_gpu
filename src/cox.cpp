@@ -40,6 +40,46 @@ numeric get_value_only(cox_cache &dev_cache,
     return val;
 }
 
+// Compute the residual at B and save the result to dev_cache.residual
+void get_residual(cox_cache &dev_cache,
+                  cox_data &dev_data,
+                  numeric *B, // B is a device pointer
+                  uint32_t N,
+                  uint32_t K,
+                  uint32_t p,
+                  cublasHandle_t handle,
+                  cudaStream_t *copy_stream)
+{
+    compute_product(dev_data.X, B, dev_cache.order_cache, N, p, K, 0, handle, CUBLAS_OP_N);
+    for(uint32_t k = 0; k< K; ++k){
+        permute_by_order(dev_cache.order_cache + k*N, dev_cache.eta+k*N, dev_data.order+k*N, N, copy_stream[k]);
+    }
+    cudaDeviceSynchronize();
+    apply_exp(dev_cache.eta, dev_cache.exp_eta, N*K, 0);
+    for(uint32_t k = 0; k < K; ++k){
+        // Save rev_cumsum result to dev_cache.outer_accumu to avoid more cache variables
+        rev_cumsum(dev_cache.exp_eta+k*N, dev_cache.outer_accumu+k*N ,N, copy_stream[k]);
+        adjust_ties(dev_cache.outer_accumu+k*N, dev_data.rankmin+k*N, dev_cache.exp_accumu+k*N, N, copy_stream[k]);
+    }
+    cudaDeviceSynchronize();
+    // Above is  _update_exp()
+    // Below is _update_outer()
+    // Save the result of division to residual to avoid more cache variables
+    cwise_div(dev_data.status, dev_cache.exp_accumu, dev_cache.residual,  N*K, 0);
+
+    for(uint32_t k = 0; k < K; ++k){
+        cumsum(dev_cache.residual+k*N, N, copy_stream[k]);
+        adjust_ties(dev_cache.residual+k*N, dev_data.rankmax+k*N, dev_cache.outer_accumu+k*N, N, copy_stream[k]);
+    }
+    cudaDeviceSynchronize();
+    mult_add(dev_cache.order_cache, dev_cache.exp_eta, dev_cache.outer_accumu, dev_data.status, N*K, 0);
+    // residuals almost ready, need to reorder them:
+    for(uint32_t k = 0; k< K; ++k){
+        permute_by_order(dev_cache.order_cache + k*N, dev_cache.residual+k*N, dev_data.rev_order+k*N, N, copy_stream[k]);
+    }
+    cudaDeviceSynchronize();
+    // reiduals ready
+}
 
 
 // Compute the gradient at B and save the result to dev_grad
@@ -155,6 +195,7 @@ Rcpp::List solve_path(Rcpp::NumericMatrix Xd,
     numeric *cox_val_host=(numeric *)malloc(sizeof(numeric)*K);
     numeric *cox_val_next_host=(numeric *)malloc(sizeof(numeric)*K);
     MatrixXf host_B(p,K);
+    MatrixXf host_residual(N, K);
 
 
 
@@ -189,11 +230,11 @@ Rcpp::List solve_path(Rcpp::NumericMatrix Xd,
     numeric cox_val;
     numeric cox_val_next;
     numeric rhs_ls; // right-hand side of line search condition
-    numeric diff; // Max norm of the difference of two consecutive iterates
 
     const int num_lambda = lambda_1_all.size();
     numeric step_size_intial = (numeric)step_sized;
     Rcpp::List result(num_lambda);
+    Rcpp::List residual_result(num_lambda);
     bool stop; // Stop line searching
     numeric value_change;
     numeric weight_old, weight_new;
@@ -266,17 +307,6 @@ Rcpp::List solve_path(Rcpp::NumericMatrix Xd,
                 step_size /= linesearch_beta;
             }
 
-            // diff = max_diff(dev_param, K, p);
-            // if (diff < eps)
-            // {
-            //     std::cout << "convergence based on parameter change reached in " << i <<" iterations\n";
-            //     std::cout << "current step size is " << step_size << std::endl;
-            //     gettimeofday(&end, NULL);
-            //     double delta  = ((end.tv_sec  - start.tv_sec) * 1000000u + end.tv_usec - start.tv_usec) / 1.e6;
-            //     std::cout <<  "elapsed time is " << delta << " seconds" << std::endl;
-            //     Rcpp::checkUserInterrupt();
-            //     break;
-            // }
 
             if(value_change < 5e-7){
                 std::cout << "convergence based on value change reached in " << i <<" iterations\n";
@@ -304,7 +334,19 @@ Rcpp::List solve_path(Rcpp::NumericMatrix Xd,
 
         }
         cudaMemcpy(&host_B(0,0), dev_param.B, sizeof(numeric)*K*p, cudaMemcpyDeviceToHost);
+        get_residual(dev_cache,
+                     dev_data,
+                     dev_param.B, // B is a device pointer
+                     N,
+                     K,
+                     p,
+                     handle,
+                     copy_stream);
+        
+        cudaMemcpy(&host_residual(0,0), dev_cache.residual, sizeof(numeric)*N*K, cudaMemcpyDeviceToHost);
+
         result[lam_ind] = host_B.cast<double>();
+        residual_result[lam_ind] = host_residual.cast<double>();
         std::cout << "Solution for the " <<  lam_ind+1 << "th lambda pair is obtained\n";
     }
 
@@ -320,5 +362,6 @@ Rcpp::List solve_path(Rcpp::NumericMatrix Xd,
     free(copy_stream);
     free(cox_val_host);
     free(cox_val_next_host);
-    return result;
+    return Rcpp::List::create(Rcpp::Named("result") = result,
+                              Rcpp::Named("residual") = residual_result);
 }
