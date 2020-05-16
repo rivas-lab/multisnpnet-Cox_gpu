@@ -208,8 +208,8 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
     print(lambda_seq_local)
     print("current Maximum Scores are:")
     print(max_score)
-    # if all failed
-    if(all(max_score > lambda_seq_local)){
+    # if all failed (first one fails)
+    if(max_score[1] > lambda_seq_local[1]){
         features.to.discard = NULL
         current_B = result[[1]]
         score = dnorm_list[[1]]
@@ -241,7 +241,7 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
         print(max_Cval_this_iter)
         print(last_Cval_this_iter)
         max_cindex = pmax(max_cindex, max_Cval_this_iter)
-        early_stop = early_stop | (last_Cval_this_iter < max_cindex)
+        early_stop = early_stop | (signif(last_Cval_this_iter,3) < signif(max_cindex,3))
 
         if(all(early_stop)){
           print("Early stop reached")
