@@ -314,6 +314,9 @@ Rcpp::List solve_path(Rcpp::NumericMatrix Xd,
                 gettimeofday(&end, NULL);
                 double delta  = ((end.tv_sec  - start.tv_sec) * 1000000u + end.tv_usec - start.tv_usec) / 1.e6;
                 std::cout <<  "elapsed time is " << delta << " seconds" << std::endl;
+
+                std::cout << "Objective value (smooth) at convergence is " << cox_val_next << std::endl;
+                std::cout << "line search value is " << rhs_ls << std::endl;
                 Rcpp::checkUserInterrupt();
                 break;
             }

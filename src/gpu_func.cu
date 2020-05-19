@@ -12,7 +12,7 @@ typedef thrust::device_vector<numeric>::iterator Iterator;
 typedef thrust::device_vector<int>::iterator   IndexIterator;
 typedef thrust::permutation_iterator<Iterator, IndexIterator> PermIter;
 
-#define MAX_THREAD_PER_BLOCK 1024
+#define THREAD_PER_BLOCK 128
 
 void allocate_device_memory(cox_data &dev_data, cox_cache &dev_cache, cox_param &dev_param, uint32_t total_cases, uint32_t K, uint32_t p)
 {
@@ -112,6 +112,38 @@ __device__ __forceinline__ float atomicMax(float *address, float val)
     return __int_as_float(ret);
 }
 
+// GPU reduction code, adapted from https://developer.download.nvidia.com/assets/cuda/files/reduction.pdf
+// Of course we can do the same thing for Max, but we don't need it for now.
+template<uint32_t blockSize>
+__device__ void warpSum(volatile numeric *sdata, uint32_t tid){
+    if (blockSize >= 64) sdata[tid] += sdata[tid + 32];
+    if (blockSize >= 32) sdata[tid] += sdata[tid + 16];
+    if (blockSize >= 16) sdata[tid] += sdata[tid + 8];
+    if (blockSize >= 8) sdata[tid] += sdata[tid + 4];
+    if (blockSize >= 4) sdata[tid] += sdata[tid + 2];
+    if (blockSize >= 2) sdata[tid] += sdata[tid + 1];
+}
+
+template<uint32_t blockSize>
+__device__ void reduce_sum(numeric *g_idata, numeric *g_odata, uint32_t n){
+    __shared__ numeric sdata[THREAD_PER_BLOCK];
+    uint32_t tid = threadIdx.x;
+    uint32_t i = blockIdx.x*(blockSize*2) + tid;
+    sdata[tid] = (i+blockSize<n)?g_idata[i+blockSize]:0.0;
+    if(i < n){
+        sdata[tid] += g_idata[i];
+    }
+    __syncthreads();
+    if (blockSize >= 512) { if (tid < 256) { sdata[tid] += sdata[tid + 256]; } __syncthreads(); }
+    if (blockSize >= 256) { if (tid < 128) { sdata[tid] += sdata[tid + 128]; } __syncthreads(); }
+    if (blockSize >= 128) { if (tid < 64) { sdata[tid] += sdata[tid + 64]; } __syncthreads(); }
+    if (tid < 32) warpSum<blockSize>(sdata, tid);
+    if(tid == 0){
+        atomicAdd(g_odata,sdata[0]);
+    }
+
+}
+
 
 void compute_product(numeric *A, numeric *B, numeric *C, 
     uint32_t N, uint32_t p, uint32_t K, cudaStream_t stream, cublasHandle_t handle, cublasOperation_t trans=CUBLAS_OP_N)
@@ -137,7 +169,7 @@ void apply_exp_gpu(const numeric *x, numeric *ex, uint32_t len)
 
 void apply_exp(const numeric *x, numeric *ex, uint32_t len, cudaStream_t stream)
 {
-    constexpr int num_thread = 128;
+    constexpr int num_thread = THREAD_PER_BLOCK;
     int num_block = (len + num_thread - 1)/num_thread;
     apply_exp_gpu<<<num_block, num_thread, 0, stream>>>(x, ex, len);
 }
@@ -167,7 +199,7 @@ void adjust_ties_gpu(const numeric *x, const int *rank, numeric *y, uint32_t len
 // adjust rank of x and save it to y
 void adjust_ties(const numeric *x, const int *rank, numeric *y, uint32_t len , cudaStream_t stream)
 {
-    constexpr int num_thread = 128;
+    constexpr int num_thread = THREAD_PER_BLOCK;
     int num_block = (len + num_thread - 1)/num_thread;
     adjust_ties_gpu<<<num_block, num_thread, 0, stream>>>(x, rank, y, len);
 }
@@ -188,7 +220,7 @@ void cwise_div_gpu(const numeric *x, const  numeric *y, numeric *z, uint32_t len
 // Compute x./y and save the result to z
 void cwise_div(const numeric *x, const numeric *y, numeric *z, uint32_t len, cudaStream_t stream)
 {
-    constexpr int num_thread = 128;
+    constexpr int num_thread = THREAD_PER_BLOCK;
     int num_block = (len + num_thread - 1)/num_thread;
     cwise_div_gpu<<<num_block, num_thread, 0, stream>>>(x, y, z, len);
 }
@@ -215,7 +247,7 @@ void mult_add_gpu(numeric *z, const numeric *a, const numeric *b, const numeric 
 // Set z = a*b - c
 void mult_add(numeric *z, const numeric *a, const numeric *b, const numeric *c, uint32_t len,cudaStream_t stream)
 {
-    constexpr int num_thread = 128;
+    constexpr int num_thread = THREAD_PER_BLOCK;
     int num_block = (len + num_thread - 1)/num_thread;
     mult_add_gpu<<<num_block, num_thread, 0, stream>>>(z, a, b, c, len);
 }
@@ -224,35 +256,19 @@ void mult_add(numeric *z, const numeric *a, const numeric *b, const numeric *c, 
 __global__
 void coxval_gpu(const numeric *x, numeric *y, const numeric *z, numeric *val, uint32_t len)
 {
-    uint32_t i = blockIdx.x*blockDim.x + threadIdx.x;
+    uint32_t i = blockIdx.x*(2*THREAD_PER_BLOCK) + threadIdx.x;
     if(i==0){
         val[0] = 0.0;
     }
 
-    if(i < len)
-    {
+    if(i < len){
         y[i] = (log(x[i]) - y[i]) * z[i];
     }
-    __shared__ numeric sdata[128];
-    sdata[threadIdx.x] = (i<len)?y[i]:0.0;
 
-    __syncthreads();
-    // do reduction in shared mem
-    for (int s=1; s < blockDim.x; s *=2)
-    {
-        int index = 2 * s * threadIdx.x;;
-
-        if (index < blockDim.x)
-        {
-            sdata[index] += sdata[index + s];
-        }
-        __syncthreads();
+    if(i+THREAD_PER_BLOCK < len){
+        y[i+THREAD_PER_BLOCK] = (log(x[i+THREAD_PER_BLOCK]) - y[i+THREAD_PER_BLOCK]) * z[i+THREAD_PER_BLOCK];
     }
-
-    // write result for this block to global mem
-    if (threadIdx.x == 0){
-        atomicAdd(val,sdata[0]);
-    }
+    reduce_sum<THREAD_PER_BLOCK>(y, val, len);
 }
 
 
@@ -261,8 +277,8 @@ void coxval_gpu(const numeric *x, numeric *y, const numeric *z, numeric *val, ui
 // compute sum((log(x) - y) *z), x will be modified, result saved in val
 void get_coxvalue(const numeric *x, numeric *y, const  numeric *z, numeric *val, uint32_t len, cudaStream_t stream)
 {
-    constexpr int num_thread = 128;
-    int num_block = (len + num_thread - 1)/num_thread;
+    constexpr int num_thread = THREAD_PER_BLOCK;
+    int num_block = (len + (2*num_thread) - 1)/(2*num_thread);
     coxval_gpu<<<num_block, num_thread, 0, stream>>>(x, y, z, val, len);
 }
 
@@ -308,7 +324,7 @@ void update_parameters(cox_param &dev_param,
     numeric lambda_1,
     numeric lambda_2)
 {
-    constexpr int num_thread = 128;
+    constexpr int num_thread = THREAD_PER_BLOCK;
     int num_block = (p + num_thread - 1)/num_thread;
     update_parameters_gpu<<<num_block, num_thread>>>(dev_param.B, dev_param.v, dev_param.grad, dev_param.penalty_factor,
                                                      K, p,step_size, lambda_1,lambda_2);
@@ -320,6 +336,7 @@ __global__
 void ls_stop_v1_gpu(const numeric *B, const numeric *v, const numeric *g, numeric *result, uint32_t K, uint32_t p, numeric step_size)
 {
     uint32_t i = blockIdx.x*blockDim.x + threadIdx.x;
+    uint32_t tid  = threadIdx.x;
     if(i==0){
         result[0] = 0.0;
     }
@@ -330,25 +347,18 @@ void ls_stop_v1_gpu(const numeric *B, const numeric *v, const numeric *g, numeri
         numeric diff = B[i] - v[i];
         local = g[i]*diff + diff*diff/(2*step_size);
     }
-    __shared__ numeric sdata[256];
-    sdata[threadIdx.x] = local;
+    __shared__ numeric sdata[THREAD_PER_BLOCK];
+    sdata[tid] = local;
 
     __syncthreads();
-    // do reduction in shared mem
-    for (int s=1; s < blockDim.x; s *=2)
-    {
-        int index = 2 * s * threadIdx.x;;
+    // This will only work when thread_per_block = 128
+    // Perhaps  a better idea is to use a template Kernel?
+    if (tid < 64) { sdata[tid] += sdata[tid + 64]; } 
+    __syncthreads();
 
-        if (index < blockDim.x)
-        {
-            sdata[index] += sdata[index + s];
-        }
-        __syncthreads();
-    }
-
-    // write result for this block to global mem
-    if (threadIdx.x == 0){
-        atomicAdd(result, sdata[0]);
+    if (tid < 32) warpSum<THREAD_PER_BLOCK>(sdata, tid);
+    if(tid == 0){
+        atomicAdd(result,sdata[0]);
     }
 }
 
@@ -356,7 +366,7 @@ void ls_stop_v1_gpu(const numeric *B, const numeric *v, const numeric *g, numeri
 
 numeric ls_stop_v1(cox_param &dev_param, numeric step_size, uint32_t K, uint32_t p)
 {
-    constexpr int num_thread = 256;
+    constexpr int num_thread = THREAD_PER_BLOCK;
     int num_block = (K*p + num_thread - 1)/num_thread;
     ls_stop_v1_gpu<<<num_block, num_thread>>>(dev_param.B, dev_param.v, dev_param.grad, dev_param.ls_result, K, p, step_size);
     numeric result[1];
@@ -388,7 +398,7 @@ void ls_stop_v2_gpu(const numeric *B, const numeric *v, const numeric *g, const 
     // do reduction in shared mem
     for (int s=1; s < blockDim.x; s *=2)
     {
-        int index = 2 * s * threadIdx.x;;
+        int index = 2 * s * threadIdx.x;
         if (index < blockDim.x)
         {
             sdata[index] += sdata[index + s];
@@ -411,7 +421,7 @@ void ls_stop_v2_gpu(const numeric *B, const numeric *v, const numeric *g, const 
     // do reduction in shared mem
     for (int s=1; s < blockDim.x; s *=2)
     {
-        int index = 2 * s * threadIdx.x;;
+        int index = 2 * s * threadIdx.x;
         if (index < blockDim.x)
         {
             sdata[index] += sdata[index + s];
@@ -471,7 +481,7 @@ void max_diff_gpu(numeric *A, numeric *B, numeric *result, uint32_t len)
     // do reduction in shared mem
     for (int s=1; s < blockDim.x; s *=2)
     {
-        int index = 2 * s * threadIdx.x;;
+        int index = 2 * s * threadIdx.x;
 
         if (index < blockDim.x)
         {

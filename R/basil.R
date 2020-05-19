@@ -215,10 +215,6 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
         score = dnorm_list[[1]]
     } else {
         local_valid = which.min(c(max_score <= lambda_seq_local, FALSE)) - 1 # number of valid this iteration
-
-        if(local_valid != length(lambda_seq_local)){
-            num_to_add = num_to_add * 2
-        }
         
         X_val = as.matrix(select(phe_val, all_of(covs)))
         for(j in 1:local_valid){
@@ -241,7 +237,8 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
         print(max_Cval_this_iter)
         print(last_Cval_this_iter)
         max_cindex = pmax(max_cindex, max_Cval_this_iter)
-        early_stop = early_stop | (signif(last_Cval_this_iter,3) < signif(max_cindex,3))
+        #early_stop = early_stop | (signif(last_Cval_this_iter,2) < signif(max_cindex,2))
+        early_stop = early_stop | (last_Cval_this_iter < max_cindex - 0.01)
 
         if(all(early_stop)){
           print("Early stop reached")
@@ -265,9 +262,16 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
           alpha = sqrt(K)
           current_response = responsid[!early_stop]
           score = get_dual_norm(gradient, alpha)
+          # recompute ever active set, focusing only on the remaning response
+          # the ever active set is computed only from valid results in this iteration
+          ever.active = covs[unique(unlist(lapply(result, function(x){ which(apply(abs(x), 1, function(y){sum(y[keep_ind])!=0}))})))]
+          print(ever.active[1:20])
+
         } else {
           score =  dnorm_list[[local_valid]]
           current_B = result[[local_valid]]
+          new.active = lapply(result, function(x){ which(apply(abs(x), 1, function(y){sum(y)!=0}))})
+          ever.active <- union(ever.active, covs[unique(unlist(new.active))])
         }
         print(paste("current number of reponses", K))
 
@@ -289,8 +293,6 @@ basil = function(genotype.pfile, phe.file, responsid, covs = NULL,
       
         
         max_valid_index = max_valid_index + local_valid
-        new.active = lapply(result, function(x){ which(apply(abs(x), 1, function(y){sum(y)!=0}))})
-        ever.active <- union(ever.active, covs[unique(unlist(new.active))])
         features.to.discard = setdiff(covs, ever.active)
         print(paste("Number of features discarded in this iteration is", length(features.to.discard)))
         print(paste("Number of ever active variables is", length(ever.active)))
