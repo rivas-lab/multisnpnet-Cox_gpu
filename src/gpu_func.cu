@@ -49,6 +49,8 @@ void free_device_memory(cox_data &dev_data, cox_cache &dev_cache, cox_param &dev
     cudaFree(dev_data.status);
     cudaFree(dev_data.rankmax);
     cudaFree(dev_data.rankmin);
+    cudaFree(dev_data.order);
+    cudaFree(dev_data.rev_order);
 
     cudaFree(dev_cache.outer_accumu);
     cudaFree(dev_cache.eta);
@@ -57,6 +59,7 @@ void free_device_memory(cox_data &dev_data, cox_cache &dev_cache, cox_param &dev
     cudaFree(dev_cache.residual);
     cudaFree(dev_cache.B_col_norm);
     cudaFree(dev_cache.cox_val);
+    cudaFree(dev_cache.order_cache);
 
     cudaFree(dev_param.B);
     cudaFree(dev_param.v);
