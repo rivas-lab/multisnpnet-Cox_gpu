@@ -83,6 +83,11 @@ class Cox_GPU
         std::cout << "Number of responses: " << K << std::endl;
         std::cout << "Number of variables: " << p << std::endl;
 
+        size_t totalm, freem;
+        cudaMemGetInfo(&freem, &totalm);
+        std::cout << "Total memory available: " << ((double)totalm)/1e9 << " GB\n";
+        std::cout << ((double)freem)/1e9 << " GB free before allocation\n";
+
         cudaError_t error = allocate_device_memory(dev_data, dev_cache, dev_param, N, K, p);
         if(error != cudaSuccess)
         {
@@ -91,10 +96,8 @@ class Cox_GPU
             Rcpp::stop("CUDA malloc failed, not enough memory\n"); 
         }
         std::cout << "GPU memory allocation successful\n";
-        size_t totalm, freem;
         cudaMemGetInfo(&freem, &totalm);
-        std::cout << "Total memory available: " << ((double)totalm)/1e9 << " GB\n";
-        std::cout << ((double)freem)/1e9 << " GB free\n";
+        std::cout << ((double)freem)/1e9 << " GB free after allocation\n";
 
 
         cox_val_host = (numeric *)malloc(K*sizeof(numeric));
@@ -190,9 +193,6 @@ class Cox_GPU
             for(uint32_t k = 0; k < K; ++k)
             {
                 val += cox_val_host[k];
-                if(val > 1e5){
-                    std::cout << "The " << k << "th response has very large Cox value, running diagnosis\n";
-                }
             }
         }
         return val;
@@ -346,6 +346,15 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
         result[lam_ind] = prob.host_B.cast<double>();
         residual_result[lam_ind] = prob.host_residual.cast<double>();
         std::cout << "Solution for the " <<  lam_ind+1 << "th lambda pair is obtained\n";
+        std::cout << "Checking CUDA errors...\n";
+        cudaError_t error = cudaGetLastError();
+        if(error != cudaSuccess)
+        {
+            // print the CUDA error message and exit
+            std::cout << "CUDA error: " << cudaGetErrorString(error) << std::endl;
+            Rcpp::stop("A CUDA error occurred during this iteration. Stop!\n"); 
+        }
+
     }
 
     cublasDestroy(handle);
