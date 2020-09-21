@@ -88,7 +88,7 @@ public:
 
         size_t totalm, freem;
         cudaMemGetInfo(&freem, &totalm);
-        std::cout << "Total memory available: " << ((double)totalm) / 1e9 << " GB\n";
+        std::cout << "Total memory available: " << ((double)totalm) / 1e9 << " GB.\t";
         std::cout << ((double)freem) / 1e9 << " GB free before allocation\n";
 
         cudaError_t error = allocate_device_memory(dev_data, dev_cache, dev_param, N, K, p, K0);
@@ -98,7 +98,7 @@ public:
             std::cout << "CUDA error: " << cudaGetErrorString(error) << std::endl;
             Rcpp::stop("CUDA malloc failed, not enough memory\n");
         }
-        std::cout << "GPU memory allocation successful\n";
+        std::cout << "GPU memory allocation successful.\t";
         cudaMemGetInfo(&freem, &totalm);
         std::cout << ((double)freem) / 1e9 << " GB free after allocation\n";
 
@@ -106,7 +106,9 @@ public:
         host_B.resize(p, K0);
         host_residual.resize(N, K);
 
-        std::cout << "Casting data to float32...\n";
+        struct timeval start, end;
+        std::cout << "Casting data to float32...\t";
+        gettimeofday(&start, NULL);
         // Do everything in single precision.
         Eigen::Map<Eigen::MatrixXd> Xmap(X, N, p);
         Eigen::Map<Eigen::MatrixXd> statusmap(status, N, K);
@@ -116,7 +118,11 @@ public:
         Eigen::MatrixXf statusf(statusmap.cast<float>());
         Eigen::MatrixXf Bf(Bmap.cast<float>());
         Eigen::VectorXf pfacf(pfacmap.cast<float>());
-        std::cout << "Copying data to the GPU...\n";
+        gettimeofday(&end, NULL);
+        double delta = ((end.tv_sec - start.tv_sec) * 1000000u + end.tv_usec - start.tv_usec) / 1.e6;
+        std::cout << "Succeed! Elapsed time: "<< delta << " seconds.\n";
+
+        std::cout << "Copying data to the GPU...\t";
 
         // initialize parameters on the device
         cudaMemcpy(dev_param.B, &Bf(0, 0), sizeof(numeric) * K0 * p, cudaMemcpyHostToDevice);
@@ -125,8 +131,7 @@ public:
 
         // Copy the data
         cudaMemcpy(dev_data.X, &Xf(0, 0), sizeof(numeric) * N * p, cudaMemcpyHostToDevice);
-        std::cout << "Copy data matrix successfull\n";
-        std::cout << "size of X is " << sizeof(numeric) * p * N << " byte " << std::endl;
+
 
         cudaMemcpy(dev_data.status, &statusf(0, 0), sizeof(numeric) * N * K, cudaMemcpyHostToDevice);
 
@@ -134,7 +139,7 @@ public:
         cudaMemcpy(dev_data.rankmax, rankmax, sizeof(int) * N * K, cudaMemcpyHostToDevice);
         cudaMemcpy(dev_data.order, order, sizeof(int) * N * K, cudaMemcpyHostToDevice);
         cudaMemcpy(dev_data.rev_order, rev_order, sizeof(int) * N * K, cudaMemcpyHostToDevice);
-        std::cout << "Copy other data successful!\n";
+        std::cout << "Succeed!\n";
 
         temp_storage_bytes = 0;
         for (uint32_t k = 0; k < K; ++k)
@@ -144,15 +149,15 @@ public:
             cudaMalloc(&d_temp_storage[k], temp_storage_bytes);
         }
         std::cout << "temp storage CUB scan is " << temp_storage_bytes << "bytes \n";
-        std::cout << "Checking CUDA errors...\n";
+        std::cout << "Checking CUDA errors...\t";
         cudaError_t error2 = cudaGetLastError();
         if (error2 != cudaSuccess)
         {
             // print the CUDA error message and exit
             std::cout << "CUDA error: " << cudaGetErrorString(error2) << std::endl;
-            Rcpp::stop("A CUDA error occurred during this iteration. Stop!\n");
+            Rcpp::stop("A CUDA error occurred during cudaMemcpy or CUB initialization. Stop!\n");
         }
-        std::cout << "Cox GPU object constructed successfully!\n";
+        std::cout << "None. Cox GPU object constructed successfully!\n";
     }
 
     ~Cox_GPU()
@@ -336,12 +341,12 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
             if (value_change < 5e-7)
             {
                 std::cout << "convergence based on value change reached in " << i << " iterations\n";
-                std::cout << "current step size is " << step_size << std::endl;
+                // std::cout << "current step size is " << step_size << std::endl;
                 gettimeofday(&end, NULL);
                 double delta = ((end.tv_sec - start.tv_sec) * 1000000u + end.tv_usec - start.tv_usec) / 1.e6;
                 std::cout << "elapsed time is " << delta << " seconds" << std::endl;
 
-                std::cout << "Objective value (smooth) at convergence is " << cox_val_next << std::endl;
+                // std::cout << "Objective value (smooth) at convergence is " << cox_val_next << std::endl;
                 Rcpp::checkUserInterrupt();
                 break;
             }
