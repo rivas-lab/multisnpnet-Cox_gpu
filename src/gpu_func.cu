@@ -7,7 +7,7 @@
 
 
 cudaError_t allocate_device_memory(cox_data &dev_data, cox_cache &dev_cache, cox_param &dev_param, 
-                                    uint32_t total_cases, uint32_t K, uint32_t p)
+                                    uint32_t total_cases, uint32_t K, uint32_t p, uint32_t K0)
 {
     cudaMalloc((void**)&dev_data.X, sizeof(numeric) *p * total_cases);
     cudaMalloc((void**)&dev_data.status, sizeof(numeric)  * total_cases*K);
@@ -25,7 +25,7 @@ cudaError_t allocate_device_memory(cox_data &dev_data, cox_cache &dev_cache, cox
     cudaMalloc((void**)&dev_cache.cox_val, sizeof(numeric) * K);
     cudaMalloc((void**)&dev_cache.order_cache, sizeof(numeric) * total_cases*K);
 
-    cudaMalloc((void**)&dev_param.B, sizeof(numeric) * K * p);
+    cudaMalloc((void**)&dev_param.B, sizeof(numeric) * K0 * p);
     cudaMalloc((void**)&dev_param.v, sizeof(numeric) * K * p);
     cudaMalloc((void**)&dev_param.grad, sizeof(numeric) * K * p);
     cudaMalloc((void**)&dev_param.prev_B, sizeof(numeric) * K * p);
@@ -305,7 +305,7 @@ void get_coxvalue(const numeric *x, numeric *y, const  numeric *z, numeric *val,
 
 
 __global__ void update_parameters_gpu(numeric *B, const numeric *v, const numeric *g, const numeric *penalty_factor,
-    uint32_t K, uint32_t p,numeric step_size, numeric lambda_1, numeric lambda_2)
+    uint32_t K, uint32_t p, uint32_t K0, numeric step_size, numeric lambda_1, numeric lambda_2)
 {
     uint32_t i = blockIdx.x*blockDim.x + threadIdx.x;
     if (i < p)
@@ -314,7 +314,7 @@ __global__ void update_parameters_gpu(numeric *B, const numeric *v, const numeri
         numeric lambdap1 = lambda_1*penalty_factor[i]*step_size;
         numeric lambdap2 = lambda_2*penalty_factor[i]*step_size;
         numeric norm = 0.0;
-        for (uint32_t k = 0; k <K; ++k)
+        for (uint32_t k = 0; k < K; ++k)
         {
             uint32_t ind = i+k*p;
             // gradient  descent
@@ -323,6 +323,11 @@ __global__ void update_parameters_gpu(numeric *B, const numeric *v, const numeri
             ba = fabs(B[ind]);
             B[ind] = signbit(lambdap1-ba)*copysign(ba-lambdap1, B[ind]);
 
+            norm += B[ind]*B[ind];
+        }
+
+        for (uint32_t k = K; k < K0; ++k){
+            uint32_t ind = i+k*p;
             norm += B[ind]*B[ind];
         }
         // Group soft-thresholding
@@ -340,6 +345,7 @@ __global__ void update_parameters_gpu(numeric *B, const numeric *v, const numeri
 void update_parameters(cox_param &dev_param,
     uint32_t K,
     uint32_t p,
+    uint32_t K0,
     numeric step_size,
     numeric lambda_1,
     numeric lambda_2)
@@ -347,7 +353,7 @@ void update_parameters(cox_param &dev_param,
     constexpr int num_thread = THREAD_PER_BLOCK;
     int num_block = (p + num_thread - 1)/num_thread;
     update_parameters_gpu<<<num_block, num_thread>>>(dev_param.B, dev_param.v, dev_param.grad, dev_param.penalty_factor,
-                                                     K, p,step_size, lambda_1,lambda_2);
+                                                     K, p, K0, step_size, lambda_1,lambda_2);
 
 }
 

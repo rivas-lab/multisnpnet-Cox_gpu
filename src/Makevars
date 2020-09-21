@@ -1,9 +1,8 @@
-CUDA_HOME = /scg/apps/software/cuda/10.1.168_418.67
 CXX = g++
 
 # This defines what the shared object libraries will be
 PKG_LIBS= -L$(CUDA_HOME)/lib64 -Wl,-rpath -Wl, -lcublas -lcudart
-
+SAMPLE_DIR  = /share/sw/open/cuda/10.0.130/samples/common/inc
 
 R_INC = $(R_HOME)/include
 RCPP_INC = $(R_HOME)/library/Rcpp/include
@@ -12,10 +11,10 @@ EIGEN_INC = $(R_HOME)/library/RcppEigen/include
 NVCC = nvcc
 CUDA_INC = $(CUDA_HOME)/include
 CUDA_LIB = $(CUDA_HOME)/lib64
-CUB_INC = /oak/stanford/groups/mrivas/users/ruilin/scratch/cub-1.8.0
+CUB_INC = /local-scratch/mrivas/softwares/cub-1.8.0
 
 LIBS = -lcudart -lcublas
-NVCC_FLAGS = -Xcompiler "-fPIC" -O2 -c -arch=sm_60 -I$(R_INC)
+NVCC_FLAGS = -Xcompiler "-fPIC" -O2 -c -arch=sm_70 -I$(R_INC)
 
 ### Define objects
 cu_sources := $(wildcard *cu)

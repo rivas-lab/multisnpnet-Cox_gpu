@@ -28,7 +28,7 @@ solve_aligned_gpu = function(X, y_list, status_list, lambda_1, lambda_2, p.fac=N
   if(is.null(B0)){
     B0 = matrix(0.0, p, K)
   } else {
-    if(nrow(B0)!= p || ncol(B0) != K){
+    if(nrow(B0)!= p || ncol(B0) < K){
       stop("dimension of B is incorrect")
     }
   }

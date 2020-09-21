@@ -38,7 +38,7 @@ typedef struct cox_param{
 
 
 cudaError_t allocate_device_memory(cox_data &dev_data, cox_cache &dev_cache, cox_param &dev_param, 
-                                   uint32_t total_cases, uint32_t K, uint32_t p);
+                                   uint32_t total_cases, uint32_t K, uint32_t p, uint32_t K0);
 
 
 void free_device_memory(cox_data &dev_data, cox_cache &dev_cache, cox_param &dev_param);
@@ -73,6 +73,7 @@ void get_coxvalue(const numeric *x, numeric *y, const numeric *z, numeric *val, 
 void update_parameters(cox_param &dev_param,
                        uint32_t K,
                        uint32_t p,
+                       uint32_t K0,
                        numeric step_size,
                        numeric lambda_1,
                        numeric lambda_2);
