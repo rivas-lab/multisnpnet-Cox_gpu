@@ -44,3 +44,42 @@ solve_aligned_gpu <- function(X, y_list, status_list, lambda_1, lambda_2, p.fac 
     solve_path(X, status, rankmin, rankmax, order_mat, rev_order_mat, B0, lambda_1, 
         lambda_2, p.fac, 1, 5000)
 }
+
+#' @export
+coxph_gpu <- function(X, y, status, beta0=NULL, standardize=T)
+{
+    if(any(is.na(X)))
+    {
+        stop("We do not allow NAs in the predictor matrix")
+    }
+
+    if(any(is.na(y)))
+    {
+        stop("We do not allow NAs in the time vector")
+    }
+
+    if(any(is.na(status)))
+    {
+        stop("We do not allow NAs in the status vector")
+    }
+
+    if(standardize)
+    {
+        mu = apply(X, 2, mean)
+        sigma  = apply(X, 2, sd)
+        X = sweep(X, 2, mu, FUN='-')
+        X = sweep(X, 2, sigma, FUN='/')
+    }
+    if(!is.null(beta0))
+    {
+        beta0 = as.matrix(beta0, ncol(X), 1)
+    }
+    result = solve_aligned_gpu(X, list(y), list(status), c(0.0), c(0.0), p.fac = NULL, 
+                B0 = beta0)
+    result = as.vector(result[["result"]][[1]])
+    if(standardize)
+    {
+        result  = result / sigma
+    }
+    result
+}
