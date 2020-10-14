@@ -318,17 +318,13 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
                 if (!std::isfinite(cox_val_next))
                 {
                     std::cout << "Encountered infinite/NaN Cox value, reduce step size\n";
-                    stop = false;
+                    stop = (step_size < 1e-6);
                 }
                 else
                 {
                     stop = prob.ls_stop(cox_val, cox_val_next, step_size);
                 }
 
-                // if (step_size < 1e-6)
-                // {
-                //     stop = true;
-                // }
 
                 if (stop)
                 {
