@@ -249,8 +249,7 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
                       Rcpp::NumericVector pfac,
                       double step_sized = 1.0,
                       int niter = 2000,
-                      double linesearch_betad = 1.1,
-                      double eps = 1e-5 // convergence criteria
+                      double linesearch_betad = 1.1
 )
 {
     // B is a long and skinny matrix now! rows are features and cols are responses
@@ -287,6 +286,7 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
     Rcpp::List residual_result(num_lambda);
     // Initialization done, starting solving the path
     struct timeval start, end;
+    bool nan_stop = false;
     for (int lam_ind = 0; lam_ind < num_lambda; ++lam_ind)
     {
         gettimeofday(&start, NULL);
@@ -317,8 +317,11 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
                 // This block are the line search conditions
                 if (!std::isfinite(cox_val_next))
                 {
-                    std::cout << "Encountered infinite/NaN Cox value, reduce step size\n";
                     stop = (step_size < 1e-6);
+                    if(stop){
+                        nan_stop = true;
+                        goto terminate_nan;
+                    }
                 }
                 else
                 {
@@ -366,7 +369,6 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
 
         result[lam_ind] = prob.host_B.cast<double>();
         residual_result[lam_ind] = prob.host_residual.cast<double>();
-        std::cout << "Solution for the " << lam_ind + 1 << "th lambda pair is obtained\n";
         std::cout << "Checking CUDA errors...\n";
         cudaError_t error = cudaGetLastError();
         if (error != cudaSuccess)
@@ -375,6 +377,10 @@ Rcpp::List solve_path(Rcpp::NumericMatrix X,
             std::cout << "CUDA error: " << cudaGetErrorString(error) << std::endl;
             Rcpp::stop("A CUDA error occurred during this iteration. Stop!\n");
         }
+        std::cout << "None. Solution for the " << lam_ind + 1 << "th lambda pair is obtained\n";
+    }
+    if(nan_stop){
+        terminate_nan:Rf_warning("Proximal gradient did not converge for some lambdas, return finite results only\n");
     }
 
     cublasDestroy(handle);
